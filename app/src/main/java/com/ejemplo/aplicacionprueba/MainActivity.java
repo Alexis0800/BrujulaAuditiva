@@ -10,6 +10,8 @@ import android.hardware.SensorManager;
 import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.os.Vibrator;
+import android.view.animation.RotateAnimation;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.activity.EdgeToEdge;
@@ -24,16 +26,17 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private Sensor accelerometer, magnetometer;
     private float[] gravity = new float[3];
     private float[] geomagnetic = new float[3];
-    private MediaPlayer mediaPlayer;
+    private MediaPlayer mediaPlayerNorte, mediaPlayerSur, mediaPlayerEste, mediaPlayerOeste;
     private Vibrator vibrator;
     private TextView directionText;
+    private ImageView compassImage;
 
-    // Factor de suavizado para el filtro de paso bajo
     private static final float ALPHA = 0.25f;  // Ajuste del suavizado
-    private float lastAzimuth = -999f;  // Último valor de azimuth, para evitar múltiples activaciones
+    private float lastAzimuth = -999f;  // Último valor de azimuth
     private static final float MIN_DIFF = 1.0f;  // Diferencia mínima en grados para permitir una nueva activación
     private long lastSoundTime = 0;  // Última vez que se reprodujo el sonido
     private static final long SOUND_DELAY = 2000;  // Tiempo mínimo entre sonidos (2 segundos)
+    private float currentDegree = 0f;  // Para rotar la brújula
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,14 +53,20 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI);
         sensorManager.registerListener(this, magnetometer, SensorManager.SENSOR_DELAY_UI);
 
-        // Inicializa el reproductor de sonidos (archivo en res/raw)
-        mediaPlayer = MediaPlayer.create(this, R.raw.sonar);
+        // Inicializa los MediaPlayers para cada punto cardinal
+        mediaPlayerNorte = MediaPlayer.create(this, R.raw.sonido_norte);
+        mediaPlayerSur = MediaPlayer.create(this, R.raw.sonido_sur);
+        mediaPlayerEste = MediaPlayer.create(this, R.raw.sonido_este);
+        mediaPlayerOeste = MediaPlayer.create(this, R.raw.sonido_oeste);
 
         // Inicializa la vibración
         vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
 
         // Obtener referencia al TextView para mostrar la dirección
         directionText = findViewById(R.id.directionText);
+
+        // Obtener referencia a la imagen de la brújula
+        compassImage = findViewById(R.id.compassImage);
 
         // Ajusta las barras del sistema
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
@@ -84,41 +93,57 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 SensorManager.getOrientation(R, orientation);
                 float azimuth = (float) Math.toDegrees(orientation[0]); // orientación en grados
 
-                // Redondear azimuth a enteros
-                int roundedAzimuth = Math.round(azimuth);
+                // Asegurar que los valores estén entre 0 y 359
+                float degree = (azimuth + 360) % 360;
 
                 // Evitar múltiples activaciones repetitivas solo si el cambio es mayor que el umbral
-                if (Math.abs(roundedAzimuth - lastAzimuth) >= MIN_DIFF) {
-                    lastAzimuth = roundedAzimuth;  // Actualiza el valor del azimuth
+                if (Math.abs(degree - lastAzimuth) >= MIN_DIFF) {
+                    // Corregir la rotación de 359° a 0° para que sea continua
+                    float deltaDegree = degree - currentDegree;
+                    if (deltaDegree > 180) {
+                        deltaDegree -= 360;
+                    } else if (deltaDegree < -180) {
+                        deltaDegree += 360;
+                    }
 
-                    // Mostrar el valor entero en pantalla
-                    directionText.setText(String.valueOf(roundedAzimuth));
+                    lastAzimuth = degree;  // Actualiza el valor del azimuth
+
+                    // Rotar la brújula de forma suave
+                    RotateAnimation rotateAnimation = new RotateAnimation(
+                            currentDegree, degree,  // Cambia currentDegree por degree para una rotación correcta
+                            RotateAnimation.RELATIVE_TO_SELF, 0.5f,
+                            RotateAnimation.RELATIVE_TO_SELF, 0.5f);
+                    rotateAnimation.setDuration(210);
+                    rotateAnimation.setFillAfter(true);
+                    compassImage.startAnimation(rotateAnimation);
+                    currentDegree = degree;
+
+                    // Mostrar el valor entero en pantalla junto con la dirección cardinal
+                    directionText.setText(String.valueOf(Math.round(degree)) + "° " + getCardinalDirection(degree));
 
                     long currentTime = System.currentTimeMillis();
 
                     // Detectar los puntos cardinales y activar sonido/vibración solo si ha pasado suficiente tiempo
-                    if (roundedAzimuth >= -10 && roundedAzimuth <= 10) {
+                    if (degree >= 350 || degree <= 10) {
                         if (currentTime - lastSoundTime > SOUND_DELAY) {
-                            performAction("Norte", true);
+                            performAction("Norte", mediaPlayerNorte);
                             lastSoundTime = currentTime;
                         }
-                    } else if (roundedAzimuth >= 80 && roundedAzimuth <= 100) {
+                    } else if (degree >= 80 && degree <= 100) {
                         if (currentTime - lastSoundTime > SOUND_DELAY) {
-                            performAction("Este", true);
+                            performAction("Este", mediaPlayerEste);
                             lastSoundTime = currentTime;
                         }
-                    } else if (roundedAzimuth >= 170 && roundedAzimuth <= 190) {
+                    } else if (degree >= 170 && degree <= 190) {
                         if (currentTime - lastSoundTime > SOUND_DELAY) {
-                            performAction("Sur", true);
+                            performAction("Sur", mediaPlayerSur);
                             lastSoundTime = currentTime;
                         }
-                    } else if (roundedAzimuth >= -100 && roundedAzimuth <= -80) {
+                    } else if (degree >= 260 && degree <= 280) {
                         if (currentTime - lastSoundTime > SOUND_DELAY) {
-                            performAction("Oeste", true);
+                            performAction("Oeste", mediaPlayerOeste);
                             lastSoundTime = currentTime;
                         }
-                    } else {
-                        performAction(valueOf(roundedAzimuth), false);  // Sin sonido
                     }
                 }
             }
@@ -134,16 +159,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         return output;
     }
 
-    private void performAction(String direction, Boolean sonido) {
+    private void performAction(String direction, MediaPlayer mediaPlayer) {
         // Mostrar la dirección en pantalla (ya se hace en onSensorChanged)
-        if (sonido) {
-            // Vibrar y sonar al apuntar a un punto cardinal
-            if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
-                mediaPlayer.start();
-            }
-            if (vibrator != null) {
-                vibrator.vibrate(500); // Vibrar por 500ms
-            }
+        if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
+            mediaPlayer.start();
+        }
+        if (vibrator != null) {
+            vibrator.vibrate(500); // Vibrar por 500ms
         }
     }
 
@@ -155,11 +177,36 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // Libera el reproductor de medios y desregistra los sensores
-        if (mediaPlayer != null) {
-            mediaPlayer.release();
-            mediaPlayer = null;
+        // Libera los reproductores de medios y desregistra los sensores
+        if (mediaPlayerNorte != null) {
+            mediaPlayerNorte.release();
+            mediaPlayerNorte = null;
+        }
+        if (mediaPlayerSur != null) {
+            mediaPlayerSur.release();
+            mediaPlayerSur = null;
+        }
+        if (mediaPlayerEste != null) {
+            mediaPlayerEste.release();
+            mediaPlayerEste = null;
+        }
+        if (mediaPlayerOeste != null) {
+            mediaPlayerOeste.release();
+            mediaPlayerOeste = null;
         }
         sensorManager.unregisterListener(this);
+    }
+
+    // Obtener la dirección cardinal
+    private String getCardinalDirection(float degree) {
+        if (degree >= 350 || degree <= 10) return "N";
+        if (degree >= 80 && degree <= 100) return "E";
+        if (degree >= 170 && degree <= 190) return "S";
+        if (degree >= 260 && degree <= 280) return "O";
+        if (degree > 10 && degree < 80) return "NE";
+        if (degree > 100 && degree < 170) return "SE";
+        if (degree > 190 && degree < 260) return "SO";
+        if (degree > 280 && degree < 350) return "NO";
+        return "";
     }
 }
