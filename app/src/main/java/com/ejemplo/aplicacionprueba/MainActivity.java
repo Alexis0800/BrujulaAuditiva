@@ -57,7 +57,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
 
         // Ajustar barra de estado (StatusBar) para que siga los colores de la app
-        getWindow().setStatusBarColor(getResources().getColor(R.color.black));  // Asegúrate de que 'colorPrimary' esté definido en tus colores
+        getWindow().setStatusBarColor(getResources().getColor(R.color.black));
     }
 
     @Override
@@ -65,6 +65,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         if (event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
             // Obtener el azimuth a partir del valor magnético
             float azimuth = (float) Math.toDegrees(Math.atan2(event.values[0], event.values[1]));  // Obtener el azimuth en grados
+
+            // Invertir el azimuth para corregir la inversión de dirección
+            azimuth = -azimuth;
 
             // Convertir de -180/+180 a 0-360 grados
             float degree = (azimuth + 360) % 360;
@@ -79,7 +82,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
     private void updateCompassDisplay(int degree) {
-        // Calcular la diferencia de rotación
+        // Corregir la rotación de la imagen para evitar inversión
         float deltaDegree = degree - currentDegree;
         if (deltaDegree > 180) {
             deltaDegree -= 360;
@@ -87,9 +90,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             deltaDegree += 360;
         }
 
-        // Rotar la imagen de la brújula de forma suave, ajustando la dirección de la rotación
+        // Rotar la imagen de la brújula de forma suave, invertimos la rotación
         RotateAnimation rotateAnimation = new RotateAnimation(
-                currentDegree, currentDegree + deltaDegree,  // Hacemos la rotación relativa al ángulo actual
+                -currentDegree, -degree,  // Invertimos la rotación para corregir la dirección
                 RotateAnimation.RELATIVE_TO_SELF, 0.5f,
                 RotateAnimation.RELATIVE_TO_SELF, 0.5f);
         rotateAnimation.setDuration(250);
@@ -100,8 +103,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         directionText.setText(degree + "° " + getCardinalDirection(degree));
 
         // Actualizar el valor actual del grado
-        currentDegree = (currentDegree + deltaDegree) % 360;  // Mantener el ángulo dentro del rango 0-360
+        currentDegree = degree;
     }
+
 
     private void checkPlaySound(int degree) {
         long currentTime = System.currentTimeMillis();
@@ -109,13 +113,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         // Reproducir sonido solo si ha pasado suficiente tiempo desde el último sonido
         if (currentTime - lastSoundTime > SOUND_DELAY) {
             if (degree >= 350 || degree <= 10) {
-                playSound(mediaPlayerNorte);
-            } else if (degree >= 80 && degree <= 100) {
-                playSound(mediaPlayerEste);
+                playSound(mediaPlayerNorte);  // Norte
+            } else if (degree >= 80 && degree <= 100) {  // Este
+                playSound(mediaPlayerEste);  // Este
             } else if (degree >= 170 && degree <= 190) {
-                playSound(mediaPlayerSur);
-            } else if (degree >= 260 && degree <= 280) {
-                playSound(mediaPlayerOeste);
+                playSound(mediaPlayerSur);  // Sur
+            } else if (degree >= 260 && degree <= 280) {  // Oeste
+                playSound(mediaPlayerOeste);  // Oeste
             }
             lastSoundTime = currentTime;  // Actualizar tiempo del último sonido
         }
@@ -131,14 +135,14 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
     private String getCardinalDirection(int degree) {
-        if (degree >= 350 || degree <= 10) return "N";
-        if (degree >= 80 && degree <= 100) return "E";
-        if (degree >= 170 && degree <= 190) return "S";
-        if (degree >= 260 && degree <= 280) return "O";
-        if (degree > 10 && degree < 80) return "NE";
-        if (degree > 100 && degree < 170) return "SE";
-        if (degree > 190 && degree < 260) return "SO";
-        if (degree > 280 && degree < 350) return "NO";
+        if (degree >= 350 || degree <= 10) return "N";  // Norte
+        if (degree >= 80 && degree <= 100) return "E";  // Este
+        if (degree >= 170 && degree <= 190) return "S";  // Sur
+        if (degree >= 260 && degree <= 280) return "O";  // Oeste
+        if (degree > 10 && degree < 80) return "NE";  // Noreste
+        if (degree > 100 && degree < 170) return "SE";  // Sureste
+        if (degree > 190 && degree < 260) return "SO";  // Suroeste
+        if (degree > 280 && degree < 350) return "NO";  // Noroeste
         return "";
     }
 
