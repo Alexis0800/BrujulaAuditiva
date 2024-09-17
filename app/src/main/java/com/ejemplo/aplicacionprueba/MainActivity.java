@@ -82,17 +82,17 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
     private void updateCompassDisplay(int degree) {
-        // Corregir la rotación de la imagen para evitar inversión
+        // Calcular la diferencia de rotación
         float deltaDegree = degree - currentDegree;
         if (deltaDegree > 180) {
-            deltaDegree -= 360;
+            deltaDegree -= 360;  // Ajuste para evitar la rotación completa
         } else if (deltaDegree < -180) {
-            deltaDegree += 360;
+            deltaDegree += 360;  // Ajuste para evitar la rotación completa
         }
 
-        // Rotar la imagen de la brújula de forma suave, invertimos la rotación
+        // Rotar la imagen de la brújula de forma suave
         RotateAnimation rotateAnimation = new RotateAnimation(
-                -currentDegree, -degree,  // Invertimos la rotación para corregir la dirección
+                -currentDegree, -currentDegree - deltaDegree,  // Manejamos el deltaDegree para una rotación suave
                 RotateAnimation.RELATIVE_TO_SELF, 0.5f,
                 RotateAnimation.RELATIVE_TO_SELF, 0.5f);
         rotateAnimation.setDuration(250);
