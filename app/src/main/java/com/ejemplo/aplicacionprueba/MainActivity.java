@@ -23,7 +23,7 @@ import androidx.core.view.WindowInsetsCompat;
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
     private SensorManager sensorManager;
-    private Sensor accelerometer, magnetometer;
+    private Sensor accelerometer, magnetometer, gyroscope;
     private float[] gravity = new float[3];
     private float[] geomagnetic = new float[3];
     private MediaPlayer mediaPlayerNorte, mediaPlayerSur, mediaPlayerEste, mediaPlayerOeste;
@@ -31,12 +31,14 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private TextView directionText;
     private ImageView compassImage;
 
-    private static final float ALPHA = 0.25f;  // Ajuste del suavizado
+    private static final float ALPHA = 0.25f;  // Ajuste de suavizado para el filtro de paso bajo
     private float lastAzimuth = -999f;  // Último valor de azimuth
     private static final float MIN_DIFF = 1.0f;  // Diferencia mínima en grados para permitir una nueva activación
     private long lastSoundTime = 0;  // Última vez que se reprodujo el sonido
     private static final long SOUND_DELAY = 2000;  // Tiempo mínimo entre sonidos (2 segundos)
     private float currentDegree = 0f;  // Para rotar la brújula
+    private static final float SMOOTHING_THRESHOLD = 0.5f;  // Umbral para ignorar pequeños cambios de azimut
+    private float[] gyroData = new float[3];  // Datos del giroscopio
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,10 +50,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
+        gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
 
         // Registra los listeners de los sensores
         sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI);
         sensorManager.registerListener(this, magnetometer, SensorManager.SENSOR_DELAY_UI);
+        sensorManager.registerListener(this, gyroscope, SensorManager.SENSOR_DELAY_UI);  // Listener para giroscopio
 
         // Inicializa los MediaPlayers para cada punto cardinal
         mediaPlayerNorte = MediaPlayer.create(this, R.raw.sonido_norte);
@@ -84,6 +88,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         if (event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
             geomagnetic = applyLowPassFilter(event.values, geomagnetic);  // Aplica el filtro de paso bajo
         }
+        if (event.sensor.getType() == Sensor.TYPE_GYROSCOPE) {
+            gyroData = event.values.clone();  // Obtener los datos del giroscopio
+        }
+
         if (gravity != null && geomagnetic != null) {
             float[] R = new float[9];
             float[] I = new float[9];
@@ -95,6 +103,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
                 // Asegurar que los valores estén entre 0 y 359
                 float degree = (azimuth + 360) % 360;
+
+                // Evitar cambios pequeños no deseados
+                if (Math.abs(degree - lastAzimuth) < SMOOTHING_THRESHOLD) {
+                    return;  // Ignorar pequeños cambios para suavizar la brújula
+                }
 
                 // Evitar múltiples activaciones repetitivas solo si el cambio es mayor que el umbral
                 if (Math.abs(degree - lastAzimuth) >= MIN_DIFF) {
@@ -110,13 +123,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
                     // Rotar la brújula de forma suave
                     RotateAnimation rotateAnimation = new RotateAnimation(
-                            currentDegree, degree,  // Cambia currentDegree por degree para una rotación correcta
+                            currentDegree, -degree,  // Invertimos el valor de 'degree' para corregir la dirección de la rotación
                             RotateAnimation.RELATIVE_TO_SELF, 0.5f,
                             RotateAnimation.RELATIVE_TO_SELF, 0.5f);
-                    rotateAnimation.setDuration(210);
+                    rotateAnimation.setDuration(500);  // Incrementamos la duración para suavizar más la animación
                     rotateAnimation.setFillAfter(true);
                     compassImage.startAnimation(rotateAnimation);
-                    currentDegree = degree;
+                    currentDegree = -degree;
 
                     // Mostrar el valor entero en pantalla junto con la dirección cardinal
                     directionText.setText(String.valueOf(Math.round(degree)) + "° " + getCardinalDirection(degree));
